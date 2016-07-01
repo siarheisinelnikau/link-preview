@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Rx - Android Link Preview</string>
+    <string name="canonical_url">Canonical Url</string>
+    <string name="title">Title</string>
+    <string name="image">Image</string>
+    <string name="load_url">Load Url</string>
+    <string name="clear">Clear</string>
+    <string name="url">Url</string>
+    <string name="error_url_loading">Can\'t load url</string>
+    <string name="sample_url">http://yandex.ru</string>
+</resources>

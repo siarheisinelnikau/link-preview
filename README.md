@@ -1,2 +1,49 @@
-# android-link-preview
-Preview from an url, grabbing all the information such as title, relevant text and image
+Android Link Preview
+=========================
+
+Preview from an url, grabbing all the information such as title, relevant text and image.
+
+Based on
+-----------------
+https://github.com/LeonardoCardoso/Android-Link-Preview
+
+
+What was changed
+-----------------
+Added Rx, made some code refactoring
+Retrolambda reuired (for java8 features)
+
+
+Usage example
+-----------------
+```java
+LinkPreview.preview(link)
+  .subscribeOn(Schedulers.io())
+  .observeOn(AndroidSchedulers.mainThread())
+  .subscribe(
+    preview -> {
+      // TODO show result here
+    },
+    throwable -> {
+      // TODO show error here
+    });
+```
+
+
+
+License
+--------
+
+    Copyright 2016 Siarhei Sinelnikau
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
