@@ -1,4 +1,4 @@
-Android Link Preview
+Android Link Preview (written in Kotlin)
 =========================
 
 Preview from an url, grabbing all the information such as title, relevant text and image.
@@ -10,31 +10,30 @@ https://github.com/LeonardoCardoso/Android-Link-Preview
 
 What was changed
 -----------------
-Added Rx, made some code refactoring
-Retrolambda reuired (for java8 features)
+Synchronously API method added
 
 
-Usage example
+Usage example (Reactive)
 -----------------
 ```java
-LinkPreview.preview(link)
-  .subscribeOn(Schedulers.io())
-  .observeOn(AndroidSchedulers.mainThread())
-  .subscribe(
-    preview -> {
-      // TODO show result here
-    },
-    throwable -> {
-      // TODO show error here
-    });
+Single
+   .fromCallable { LinkPreloader.load("https://www.google.com/") }
+   .subscribeOn(Schedulers.io())
+   .observeOn(AndroidSchedulers.mainThread())
+   .subscribe(
+       { preview ->
+           // TODO handle result here
+       },
+       { throwable ->
+           // TODO handle error here
+       }
+   )
 ```
-
-
 
 License
 --------
 
-    Copyright 2016 Siarhei Sinelnikau
+    Copyright 2019 Siarhei Sinelnikau
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
