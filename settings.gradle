@@ -1,1 +1,3 @@
-include ':app', ':library'
+rootProject.name = "LinkPreviewSample"
+include ':app'
+include ':modules:LinkPreview'

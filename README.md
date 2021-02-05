@@ -7,11 +7,13 @@ Based on
 -----------------
 https://github.com/LeonardoCardoso/Android-Link-Preview
 
+Do not forget to add permissions:
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
 What was changed
 -----------------
 Synchronously API method added
-
 
 Usage example (Reactive)
 -----------------
