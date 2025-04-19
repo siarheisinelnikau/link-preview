@@ -1,3 +1,12 @@
 <resources>
-    <string name="app_name">LinkPreviewSample</string>
+    <string name="app_name">LinkPreview</string>
+    <string name="tagline">See the story behind a link.</string>
+    <string name="url_label">Link or text containing a link</string>
+    <string name="load_preview">Load preview</string>
+    <string name="cancel">Cancel</string>
+    <string name="empty_state">Paste a link to see its title, description, and image.</string>
+    <string name="loading">Loading preview…</string>
+    <string name="no_title">Untitled page</string>
+    <string name="open_page">Open page</string>
+    <string name="error_prefix">Could not load this link: %1$s</string>
 </resources>
