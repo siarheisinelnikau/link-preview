@@ -41,6 +41,16 @@ class LinkPreviewTest {
     }
 
     @Test
+    fun `standalone URL punctuation reaches the transport unchanged`() = runTest {
+        val original = "https://example.com/search?q=Hello!"
+        val loader = LinkPreview(PreviewFetcher { request ->
+            assertEquals(original, request.url)
+            response.copy(url = request.url)
+        }, dispatcher = StandardTestDispatcher(testScheduler))
+        assertEquals(original, loader.load(original).url)
+    }
+
+    @Test
     fun `invalid input fails before fetching`() = runTest {
         val loader = LinkPreview(PreviewFetcher { error("Network must not be used") }, dispatcher = StandardTestDispatcher(testScheduler))
         for (input in listOf("", "example.com", "file:///etc/passwd", "ftp://example.com", "https://user:secret@example.com", "https://example.com:99999")) {

@@ -96,6 +96,8 @@ suspend fun previewLink(): Preview {
 
 `load()` accepts an absolute HTTP(S) URL or text containing one and loads the first valid URL. Schemes such as `file:` and `javascript:`, URLs containing credentials, and invalid ports are rejected. Supply explicit `https://` or `http://`; bare domain names are not expanded. Internationalized domain names should use their ASCII/punycode representation.
 
+When the entire input is a valid URL, its trailing punctuation is preserved (for example, `https://example.com/search?q=Hello!`). URLs extracted from surrounding text have trailing sentence punctuation and unmatched closing brackets removed; balanced parentheses and IPv6 brackets are retained.
+
 Fetching and parsing run on `Dispatchers.IO` by default, so `load()` can be called from the main thread. A dispatcher can be injected for tests. The caller owns the coroutine scope; cancelling it cancels an active OkHttp call, including body reads.
 
 The returned `Preview` contains:
@@ -208,9 +210,11 @@ val preview = parser.parse(
 )
 ```
 
-Defaults are 10 images, 500 description characters, and a 2 MiB decoded response-body limit. Set `maxImages = 0` to omit images. Implement `PreviewParser` to replace the extraction strategy entirely. Direct parser calls are synchronous: move large offline parses off the Android main thread and enforce your own input-size limit.
+Defaults are 10 images, 500 description characters, and a 2 MiB decoded response-body limit. Description length is counted in Unicode code points, so supplementary characters such as emoji are never split into invalid UTF-16 halves; multi-code-point graphemes may still be split. Set `maxImages = 0` to omit images. Implement `PreviewParser` to replace the extraction strategy entirely. Direct parser calls are synchronous: move large offline parses off the Android main thread and enforce your own input-size limit.
 
-The HTML parser supports Open Graph, Twitter Cards, ordinary metadata, HTML entities, malformed markup, repeated image tags, `<base href>`, relative/protocol-relative URLs, and HTTP/BOM/meta-declared charsets. Image URLs are deduplicated and restricted to HTTP(S). The final response URL is preserved, including query parameters.
+The HTML parser supports Open Graph, Twitter Cards, ordinary metadata, HTML entities, malformed markup, repeated image tags, `<base href>`, relative/protocol-relative URLs, and HTTP/BOM/meta-declared charsets. Query-only references such as `?page=2` keep the current page path. Unknown or malformed HTTP charset declarations fall back to BOM/meta detection, then UTF-8. The final response URL is preserved, including query parameters.
+
+Image URLs are deduplicated and restricted to HTTP(S). Metadata images come first, followed by HTML images in document order. For each `<img>`, the parser chooses the first valid URL from `data-src`, `data-original`, and `src`, so lazy-loaded images take precedence over placeholder sources. Responsive `srcset` selection and images injected by JavaScript are not supported.
 
 Responses with `image/*` Content-Type become image-only previews. The OkHttp adapter closes those responses without buffering image bytes; the image loader in your UI downloads them separately. HTML and XHTML are supported, and absent Content-Type is parsed as HTML. Other explicit content types fail.
 
@@ -248,7 +252,7 @@ To build and test just the libraries without an Android SDK:
 bash ./gradlew -PincludeAndroidSample=false :link-preview:build :link-preview-okhttp:build
 ```
 
-The tests cover parser priorities, charset decoding, URL resolution, Flow behavior, cancellation, injected transports, redirects, HTTP failures, timeouts, and declared/chunked/gzip body limits. Network integration tests use a local MockWebServer; they do not depend on public websites. [CI](.github/workflows/ci.yml) checks library builds plus Android debug/release builds and lint.
+The tests cover parser priorities, lazy-loaded images, charset decoding and recovery, Unicode description limits, URL extraction and resolution, Flow behavior, cancellation, injected transports, redirects, HTTP failures, timeouts, and declared/chunked/gzip body limits. Network integration tests use a local MockWebServer; they do not depend on public websites. [CI](.github/workflows/ci.yml) checks library builds plus Android debug/release builds and lint.
 
 ### Toolchain
 

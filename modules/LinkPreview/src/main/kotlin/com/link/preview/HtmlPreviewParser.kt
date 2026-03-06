@@ -1,11 +1,15 @@
 package com.link.preview
 
 import java.net.URI
+import java.nio.charset.Charset
 import java.util.Locale
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 
-/** Open Graph → Twitter Cards → HTML fallbacks. Does not execute scripts or perform network I/O. */
+/**
+ * Open Graph → Twitter Cards → HTML fallbacks. Does not execute scripts or perform network I/O.
+ * [maxDescriptionLength] counts Unicode code points, preserving UTF-16 surrogate pairs.
+ */
 class HtmlPreviewParser(
     private val maxImages: Int = 10,
     private val maxDescriptionLength: Int = 500,
@@ -25,7 +29,7 @@ class HtmlPreviewParser(
             throw PreviewException.UnsupportedContentType(response.contentType.orEmpty())
         }
 
-        val charset = response.contentType?.let { CHARSET.find(it)?.groupValues?.get(1) }
+        val charset = response.contentType?.let(::httpCharset)
         val document = response.body.inputStream().use { Jsoup.parse(it, charset, finalUrl) }
         val metadata = metadata(document)
         fun clean(value: String): String = Jsoup.parseBodyFragment(value).text().trim()
@@ -36,16 +40,22 @@ class HtmlPreviewParser(
         val title = sequenceOf(meta("og:title", "twitter:title", "title"), document.title(), document.selectFirst("h1")?.text())
             .filterNotNull().firstOrNull { it.isNotBlank() } ?: URI(finalUrl).host
         val description = (meta("og:description", "twitter:description", "description")
-            ?: readableText(document)).take(maxDescriptionLength)
+            ?: readableText(document)).takeCodePoints(maxDescriptionLength)
 
         // jsoup resolves <base href> and redirect-relative URLs for DOM attributes.
         val base = HttpUrls.absolute(document.baseUri()) ?: finalUrl
-        val imageCandidates = sequenceOf("og:image:secure_url", "og:image", "og:image:url", "twitter:image", "twitter:image:src")
+        val metadataImages = sequenceOf("og:image:secure_url", "og:image", "og:image:url", "twitter:image", "twitter:image:src")
             .flatMap { metadata[it].orEmpty().asSequence() }
             .plus(document.select("link[rel=image_src]").asSequence().map { it.attr("href") })
             .plus(document.select("meta[itemprop=image]").asSequence().map { it.attr("content") })
-            .plus(document.select("img[src]").asSequence().map { it.attr("src") })
-        val images = imageCandidates.mapNotNull { HttpUrls.resolve(base, it) }.distinct().take(maxImages).toList()
+            .mapNotNull { HttpUrls.resolve(base, it) }
+        val htmlImages = document.select("img").asSequence().mapNotNull { image ->
+            // Lazy-load attributes often point to the real image while src is a placeholder.
+            sequenceOf("data-src", "data-original", "src").firstNotNullOfOrNull { attribute ->
+                HttpUrls.resolve(base, image.attr(attribute))
+            }
+        }
+        val images = metadataImages.plus(htmlImages).distinct().take(maxImages).toList()
         val canonical = document.select("link[href]").asSequence()
             .filter { "canonical" in it.attr("rel").lowercase(Locale.ROOT).split(Regex("\\s+")) }
             .mapNotNull { HttpUrls.resolve(base, it.attr("href")) }.firstOrNull()
@@ -73,6 +83,21 @@ class HtmlPreviewParser(
         return readable.select("p").firstOrNull { it.hasText() }?.text() ?: readable.body().text()
     }
 
+    private fun httpCharset(contentType: String): String? {
+        val name = CHARSET.find(contentType)?.groupValues?.get(1) ?: return null
+        return try {
+            Charset.forName(name).name()
+        } catch (_: IllegalArgumentException) {
+            // Broken server declarations should still allow BOM/meta detection and UTF-8 fallback.
+            null
+        }
+    }
+
+    private fun String.takeCodePoints(limit: Int): String {
+        if (length <= limit) return this
+        return substring(0, offsetByCodePoints(0, minOf(limit, codePointCount(0, length))))
+    }
+
     private fun metadata(document: Document): Map<String, List<String>> = buildMap<String, MutableList<String>> {
         for (element in document.select("meta[content]")) {
             val key = element.attr("property").ifBlank { element.attr("name") }.lowercase(Locale.ROOT)
@@ -82,6 +107,6 @@ class HtmlPreviewParser(
     }
 
     private companion object {
-        val CHARSET = Regex("charset\\s*=\\s*[\"']?([^\\s;\"']+)", RegexOption.IGNORE_CASE)
+        val CHARSET = Regex("(?:^|;)\\s*charset\\s*=\\s*[\"']?([^\\s;\"']+)", RegexOption.IGNORE_CASE)
     }
 }

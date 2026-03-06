@@ -5,15 +5,27 @@ import java.net.URISyntaxException
 
 internal object HttpUrls {
     private val candidate = Regex("https?://[^\\s<>\"']+", RegexOption.IGNORE_CASE)
+    private val closingBrackets = mapOf(')' to '(', ']' to '[', '}' to '{')
 
-    fun firstIn(text: String): String? = candidate.findAll(text).firstNotNullOfOrNull { match ->
-        var value = match.value.trimEnd('.', ',', '!', ';', ':', '?')
-        for ((open, close) in listOf('(' to ')', '[' to ']', '{' to '}')) {
-            while (value.endsWith(close) && value.count { it == close } > value.count { it == open }) {
-                value = value.dropLast(1)
-            }
+    fun firstIn(text: String): String? {
+        // A standalone URL is explicit: punctuation may be part of its path or query.
+        absolute(text)?.let { return it }
+        return candidate.findAll(text).firstNotNullOfOrNull { match ->
+            val value = match.value
+            val unmatched = closingBrackets.mapValues { (close, open) ->
+                value.count { it == close } - value.count { it == open }
+            }.toMutableMap()
+            absolute(value.trimEnd { char ->
+                when {
+                    char in ".,!;:?" -> true
+                    (unmatched[char] ?: 0) > 0 -> {
+                        unmatched[char] = unmatched.getValue(char) - 1
+                        true
+                    }
+                    else -> false
+                }
+            })
         }
-        absolute(value)
     }
 
     fun absolute(value: String): String? = try {
@@ -30,7 +42,15 @@ internal object HttpUrls {
     fun resolve(base: String, value: String): String? {
         if (value.isBlank()) return null
         return try {
-            absolute(URI(base).resolve(value.trim()).toASCIIString())
+            val relative = value.trim()
+            // URI.resolve drops the last path segment for query-only references.
+            // RFC 3986 section 5.2.2 requires retaining the base path in this case.
+            val resolved = if (relative.startsWith('?')) {
+                base.substringBefore('#').substringBefore('?') + relative
+            } else {
+                URI(base).resolve(relative).toASCIIString()
+            }
+            absolute(resolved)
         } catch (_: URISyntaxException) {
             null
         } catch (_: IllegalArgumentException) {

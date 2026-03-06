@@ -64,6 +64,23 @@ class HtmlPreviewParserTest {
     }
 
     @Test
+    fun `query-only metadata URLs keep the document or base path`() {
+        val html = """
+            <meta property='og:image' content='?image=cover&amp;width=800'>
+            <link rel='canonical' href='?page=2'>
+            <link rel='icon' href='?icon=small'>
+        """.trimIndent()
+        val preview = parse(html)
+        assertEquals(listOf("https://example.com/articles/page?image=cover&width=800"), preview.imageUrls)
+        assertEquals("https://example.com/articles/page?page=2", preview.canonicalUrl)
+        assertEquals("https://example.com/articles/page?icon=small", preview.faviconUrl)
+
+        val withBase = parse("<base href='https://cdn.example/render?old=1'>" + html)
+        assertEquals(listOf("https://cdn.example/render?image=cover&width=800"), withBase.imageUrls)
+        assertEquals("https://cdn.example/render?page=2", withBase.canonicalUrl)
+    }
+
+    @Test
     fun `metadata and HTML images are ordered deduplicated and limited`() {
         val preview = parse("""
             <meta property='og:image' content='/one.jpg'>
@@ -73,6 +90,24 @@ class HtmlPreviewParserTest {
         """.trimIndent(), HtmlPreviewParser(maxImages = 3))
         assertEquals(listOf("https://example.com/one.jpg", "https://example.com/two.jpg", "https://example.com/three.webp"), preview.imageUrls)
         assertTrue(parse("<img src='/one.jpg'>", HtmlPreviewParser(maxImages = 0)).imageUrls.isEmpty())
+    }
+
+    @Test
+    fun `lazy images prefer real sources over placeholders and follow metadata`() {
+        val html = """
+            <meta property='og:image' content='/social.jpg'>
+            <img src='/placeholder.gif' data-src='../hero.webp'>
+            <img src='data:image/gif;base64,abc' data-original='/original.jpg'>
+            <img data-src='/hero.webp'>
+            <img data-src='javascript:alert(1)' data-original='/fallback.jpg'>
+            <img data-src='file:///tmp/image' src='/regular.jpg'>
+        """.trimIndent()
+        assertEquals(
+            listOf("https://example.com/social.jpg", "https://example.com/hero.webp", "https://example.com/original.jpg", "https://example.com/fallback.jpg", "https://example.com/regular.jpg"),
+            parse(html).imageUrls,
+        )
+        assertEquals(listOf("https://example.com/social.jpg", "https://example.com/hero.webp"), parse(html, HtmlPreviewParser(maxImages = 2)).imageUrls)
+        assertTrue(parse(html, HtmlPreviewParser(maxImages = 0)).imageUrls.isEmpty())
     }
 
     @Test
@@ -109,6 +144,14 @@ class HtmlPreviewParserTest {
     }
 
     @Test
+    fun `description length counts Unicode code points without splitting emoji`() {
+        val parser = HtmlPreviewParser(maxDescriptionLength = 2)
+        assertEquals("A😀", parse("<meta name='description' content='A😀B'>", parser).description)
+        assertEquals("😀🚀", parse("<p>😀🚀🎉</p>", parser).description)
+        assertEquals("😀", parse("<p>😀</p>", parser).description)
+    }
+
+    @Test
     fun `direct images use Content Type instead of filename extension`() {
         val preview = HtmlPreviewParser().parse(PreviewResponse(url, byteArrayOf(), "IMAGE/WEBP"), url)
         assertEquals(listOf(url), preview.imageUrls)
@@ -136,6 +179,27 @@ class HtmlPreviewParserTest {
     fun `meta charset works when HTTP charset is missing`() {
         val html = "<meta charset='windows-1251'><title>Привет</title>"
         val response = PreviewResponse(url, html.toByteArray(Charset.forName("windows-1251")), null)
+        assertEquals("Привет", HtmlPreviewParser().parse(response, url).title)
+    }
+
+    @Test
+    fun `unknown or malformed HTTP charsets fall back to HTML detection`() {
+        val html = "<meta charset='windows-1251'><title>Привет</title>"
+        for (charset in listOf("not-a-real-charset", "invalid@charset")) {
+            val response = PreviewResponse(url, html.toByteArray(Charset.forName("windows-1251")), "text/html; charset=$charset")
+            assertEquals("Привет", HtmlPreviewParser().parse(response, url).title)
+        }
+        val utf8 = PreviewResponse(url, "<title>Привет 😀</title>".toByteArray(), "text/html; charset=unknown")
+        assertEquals("Привет 😀", HtmlPreviewParser().parse(utf8, url).title)
+    }
+
+    @Test
+    fun `charset parameter is matched by its full name and case insensitively`() {
+        val response = PreviewResponse(
+            url,
+            "<title>Привет</title>".toByteArray(Charset.forName("windows-1251")),
+            "text/html; x-charset=utf-8; CHARSET=\"windows-1251\"",
+        )
         assertEquals("Привет", HtmlPreviewParser().parse(response, url).title)
     }
 

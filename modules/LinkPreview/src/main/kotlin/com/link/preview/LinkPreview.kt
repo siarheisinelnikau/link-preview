@@ -25,7 +25,7 @@ class LinkPreview(
         require(maxBodyBytes > 0) { "maxBodyBytes must be positive" }
     }
 
-    /** Loads the first HTTP(S) URL in [text]. Cancellation is always rethrown. */
+    /** Loads an explicit HTTP(S) URL unchanged, or the first URL in [text]. Cancellation is rethrown. */
     suspend fun load(text: String): Preview = withContext(dispatcher) {
         val url = HttpUrls.firstIn(text) ?: throw PreviewException.InvalidUrl()
         val response = try {
